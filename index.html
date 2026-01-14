@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Check-in Hotel</title>
+  <style>
+    body{font-family:Arial;max-width:540px;margin:40px auto;padding:0 16px;text-align:center}
+    .card{border:1px solid #ddd;border-radius:14px;padding:18px}
+    .big{font-size:20px;margin:10px 0}
+    .muted{color:#666}
+    code{background:#f5f5f5;padding:2px 6px;border-radius:6px}
+    button{font-size:18px;padding:12px 16px;border-radius:12px;border:0;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="big" id="status">Procesando…</div>
+    <div class="muted" id="details"></div>
+    <div style="margin-top:14px">
+      <button onclick="location.reload()">Reintentar</button>
+    </div>
+  </div>
+
+<script>
+  function getParam(name){
+    const p = new URLSearchParams(location.search);
+    return p.get(name) || "";
+  }
+
+  async function run(){
+    const id = getParam("id");
+    const status = document.getElementById("status");
+    const details = document.getElementById("details");
+
+    if(!id){
+      status.textContent = "Falta el parámetro id";
+      details.innerHTML = 'Ejemplo: <code>?id=FLS_0000343</code>';
+      return;
+    }
+
+    try{
+      const r = await fetch("/.netlify/functions/checkin?id=" + encodeURIComponent(id));
+      const data = await r.json();
+
+      status.textContent = data.message || "Respuesta sin mensaje";
+      if(data.cliente || data.suite){
+        details.textContent = `Cliente: ${data.cliente || "-"} | Suite: ${data.suite || "-"}`;
+      } else {
+        details.textContent = "";
+      }
+    }catch(e){
+      status.textContent = "Error al conectar";
+      details.textContent = String(e);
+    }
+  }
+
+  run();
+</script>
+</body>
+</html>
