@@ -3,28 +3,21 @@ export async function handler(event) {
   if (!id) {
     return {
       statusCode: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ ok: false, message: "Falta parámetro id" }),
     };
   }
 
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNPS_5R7N4kvWTI7ROlHTdSRGP4m1IWrlOJ9k5gxSfJL9Ei8pO_mvLx7qZc7zuXUxA/exec";
+  // AQUÍ LLAMAS A TU APPS SCRIPT REAL
+  const APPS_SCRIPT_URL = "PON_AQUI_TU_URL_DE_APPS_SCRIPT_EXEC";
 
-  try {
-    const url = `${SCRIPT_URL}?id=${encodeURIComponent(id)}`;
-    const res = await fetch(url);
-    const text = await res.text();
+  const url = `${APPS_SCRIPT_URL}?id=${encodeURIComponent(id)}`;
+  const r = await fetch(url, { redirect: "follow" });
+  const text = await r.text();
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: text,
-    };
-  } catch (e) {
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ok: false, message: "Error en proxy: " + String(e) }),
-    };
-  }
+  return {
+    statusCode: 200,
+    headers: { "content-type": "application/json" },
+    body: text, // Apps Script ya devuelve JSON
+  };
 }
