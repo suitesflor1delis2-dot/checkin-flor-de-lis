@@ -38,9 +38,7 @@ export async function handler(event) {
       };
     }
 
-    const GOOGLE_SCRIPT_URL =
-      "PON_AQUI_TU_URL_APPS_SCRIPT/exec";
-
+    const GOOGLE_SCRIPT_URL = "PON_AQUI_TU_URL_APPS_SCRIPT/exec";
     // Validación (GET)
     const resp = await fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(id)}`);
     const txt = await resp.text();
@@ -180,3 +178,4 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
+
