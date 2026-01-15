@@ -1,13 +1,15 @@
+const GOOGLE_SCRIPT_URL =
+  "PEGA_AQUI_TU_URL_REAL_DE_APPS_SCRIPT/exec"; // 👈 CAMBIA SOLO ESTO
+
 export async function handler(event) {
   try {
     const qs = event.queryStringParameters || {};
     const id = String(qs.id || qs.ID || "").trim();
 
+    // ---------- POST: enviar evidencia + pin ----------
     if (event.httpMethod === "POST") {
       const body = JSON.parse(event.body || "{}");
 
-      const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/TU_ID_REAL/exec";
       const resp = await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -29,6 +31,7 @@ export async function handler(event) {
       };
     }
 
+    // ---------- GET: validación ----------
     if (!id) {
       return {
         statusCode: 400,
@@ -37,9 +40,6 @@ export async function handler(event) {
       };
     }
 
-    const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/TU_ID_REAL/exec";
-    // Validación (GET)
     const resp = await fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(id)}`);
     const txt = await resp.text();
 
@@ -125,13 +125,27 @@ function pageHtml_(id, validationTxt) {
       ctx.clearRect(0,0,canvas.width,canvas.height);
     };
 
-    function fileToDataUrl(file){
-      return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = reject;
-        r.readAsDataURL(file);
+    // ✅ comprimir imagen para que no reviente Netlify
+    async function fileToCompressedDataUrl(file, maxW = 1200, quality = 0.7) {
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = URL.createObjectURL(file);
       });
+
+      const scale = Math.min(1, maxW / img.width);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const cctx = c.getContext("2d");
+      cctx.drawImage(img, 0, 0, w, h);
+
+      URL.revokeObjectURL(img.src);
+      return c.toDataURL("image/jpeg", quality);
     }
 
     document.getElementById("send").onclick = async () => {
@@ -148,17 +162,10 @@ function pageHtml_(id, validationTxt) {
       if(!f1 || !f2){ status.textContent = "Falta foto de cédula (frente y reverso)"; return; }
 
       const firmaDataUrl = canvas.toDataURL("image/png");
-      const cedulaFrenteDataUrl = await fileToDataUrl(f1);
-      const cedulaReversoDataUrl = await fileToDataUrl(f2);
+      const cedulaFrenteDataUrl = await fileToCompressedDataUrl(f1, 1200, 0.7);
+      const cedulaReversoDataUrl = await fileToCompressedDataUrl(f2, 1200, 0.7);
 
-      const payload = {
-        id,
-        personal,
-        pin,
-        firmaDataUrl,
-        cedulaFrenteDataUrl,
-        cedulaReversoDataUrl
-      };
+      const payload = { id, personal, pin, firmaDataUrl, cedulaFrenteDataUrl, cedulaReversoDataUrl };
 
       const resp = await fetch(window.location.href, {
         method: "POST",
@@ -178,5 +185,3 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
-
-
