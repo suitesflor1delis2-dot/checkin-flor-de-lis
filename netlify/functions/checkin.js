@@ -1,6 +1,6 @@
 // ✅ URL REAL Apps Script (/exec)
 const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwYnYYEIOEQ4rCJ7nPQxV6FXRD2WNkaHoWSVp-_8RpxNhJftVjuPDZe2i_aYH2GWqYH/exec";
+  "https://script.google.com/macros/s/AKfycbzV2O-DGuK9xMeTJ3zvg0kE6pKbg7qN04hnUIy9VGQTePlex8miwj5HaxWY64W0FHPQ/exec";
 
 export async function handler(event) {
   try {
@@ -201,5 +201,6 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
+
 
 
