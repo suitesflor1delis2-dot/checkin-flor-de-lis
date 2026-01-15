@@ -7,8 +7,7 @@ export async function handler(event) {
       const body = JSON.parse(event.body || "{}");
 
       const GOOGLE_SCRIPT_URL =
-        "PON_AQUI_TU_URL_APPS_SCRIPT/exec";
-
+  "https://script.google.com/macros/s/TU_ID_REAL/exec";
       const resp = await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -38,7 +37,8 @@ export async function handler(event) {
       };
     }
 
-    const GOOGLE_SCRIPT_URL = "PON_AQUI_TU_URL_APPS_SCRIPT/exec";
+    const GOOGLE_SCRIPT_URL =
+  "https://script.google.com/macros/s/TU_ID_REAL/exec";
     // Validación (GET)
     const resp = await fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(id)}`);
     const txt = await resp.text();
@@ -178,4 +178,5 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
+
 
