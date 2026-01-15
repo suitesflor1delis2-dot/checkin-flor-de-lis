@@ -2,88 +2,181 @@ export async function handler(event) {
   try {
     const qs = event.queryStringParameters || {};
     const id = String(qs.id || qs.ID || "").trim();
-    const confirm = String(qs.confirm || "").trim();
 
-    if (!id) {
-      return html(400, `<h2>❌ Falta el parámetro id</h2><p>Ejemplo: ?id=FLS_0000343</p>`);
-    }
+    if (event.httpMethod === "POST") {
+      const body = JSON.parse(event.body || "{}");
 
-    // ✅ PON AQUÍ TU URL REAL (DEBE TERMINAR EN /exec)
-    const GOOGLE_SCRIPT_URL =
-      "https://script.google.com/macros/s/AKfycbw3GIzb3TtHqY8VNEXyYLWcGnphswHEqkAtcB5T0KenL-gFOotr0m_LN__DMa3PIkuV/exec";
-
-    // --------- CONFIRM (REGISTRA) ----------
-    if (confirm === "1") {
-      const pin = String(qs.pin || "").trim();
-      const personal = String(qs.personal || "").trim();
-
-      const form = new URLSearchParams();
-      form.set("id", id);
-      form.set("pin", pin);
-      form.set("personal", personal);
+      const GOOGLE_SCRIPT_URL =
+        "PON_AQUI_TU_URL_APPS_SCRIPT/exec";
 
       const resp = await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: form.toString(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
 
       const txt = await resp.text();
 
-      return html(
-        200,
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+        body: `
+          <div style="font-family:Arial;padding:18px">
+            <h2>Resultado</h2>
+            <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
+            <p><a href="?id=${encodeURIComponent(body.id || "")}">↩ Volver</a></p>
+          </div>
         `
-        <h2>DEBUG: Confirmación</h2>
-        <p><b>Apps Script URL:</b> ${esc(GOOGLE_SCRIPT_URL)}</p>
-        <p><b>Status Apps Script:</b> ${resp.status}</p>
-        <p><b>ID:</b> ${esc(id)}</p>
-        <p><b>Personal:</b> ${esc(personal)}</p>
-        <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
-        <p><a href="?id=${encodeURIComponent(id)}">↩ Volver</a></p>
-        `
-      );
+      };
     }
 
-    // --------- VALIDACIÓN (SOLO LEE) ----------
-    const url = `${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(id)}`;
-    const resp = await fetch(url);
+    if (!id) {
+      return {
+        statusCode: 400,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+        body: `<h2>❌ Falta el parámetro id</h2><p>Ejemplo: ?id=FLS_0000343</p>`
+      };
+    }
+
+    const GOOGLE_SCRIPT_URL =
+      "PON_AQUI_TU_URL_APPS_SCRIPT/exec";
+
+    // Validación (GET)
+    const resp = await fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(id)}`);
     const txt = await resp.text();
 
-    return html(
-      200,
-      `
-      <h2>DEBUG: Validación</h2>
-      <p><b>URL llamada:</b> ${esc(url)}</p>
-      <p><b>Status Apps Script:</b> ${resp.status}</p>
-      <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      body: pageHtml_(id, txt)
+    };
 
-      <hr/>
-      <h3>👮 Solo personal</h3>
-      <form method="GET" action="">
-        <input type="hidden" name="id" value="${esc(id)}"/>
-        <input type="hidden" name="confirm" value="1"/>
-        <input name="personal" placeholder="Nombre del personal" style="padding:8px;width:220px"/>
-        <br/><br/>
-        <input name="pin" type="password" placeholder="PIN" style="padding:8px;width:220px"/>
-        <br/><br/>
-        <button type="submit" style="padding:10px 14px">Confirmar ingreso</button>
-      </form>
-      `
-    );
   } catch (e) {
-    return html(500, `<h2>❌ Error Netlify</h2><pre>${esc(e.stack || e.message)}</pre>`);
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      body: `<h2>❌ Error Netlify</h2><pre>${esc(e.stack || e.message)}</pre>`
+    };
   }
 }
 
-function html(code, body) {
-  return {
-    statusCode: code,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
-    body: `<div style="font-family:Arial;padding:18px">${body}</div>`,
-  };
+function pageHtml_(id, validationTxt) {
+  return `
+  <div style="font-family:Arial;padding:18px;max-width:720px">
+    <h2>Validación de reserva</h2>
+    <p><b>ID:</b> ${esc(id)}</p>
+    <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(validationTxt)}</pre>
+
+    <hr/>
+    <h3>👮 Solo personal (PIN + evidencia)</h3>
+
+    <p><b>Firma del huésped</b> (firme con el dedo):</p>
+    <canvas id="sig" width="520" height="180" style="border:1px solid #ccc;border-radius:10px;touch-action:none"></canvas>
+    <div style="margin-top:8px">
+      <button id="clearSig" style="padding:8px 12px">Limpiar firma</button>
+    </div>
+
+    <p style="margin-top:18px"><b>Cédula (Frente)</b>:</p>
+    <input id="cedFront" type="file" accept="image/*" capture="environment"/>
+
+    <p style="margin-top:12px"><b>Cédula (Reverso)</b>:</p>
+    <input id="cedBack" type="file" accept="image/*" capture="environment"/>
+
+    <p style="margin-top:18px"><b>Datos del personal</b>:</p>
+    <input id="personal" placeholder="Nombre del personal" style="padding:8px;width:260px"/>
+    <br/><br/>
+    <input id="pin" type="password" placeholder="PIN" style="padding:8px;width:260px"/>
+
+    <br/><br/>
+    <button id="send" style="padding:10px 14px">Confirmar ingreso</button>
+
+    <p id="status" style="margin-top:12px;color:#444"></p>
+  </div>
+
+  <script>
+    const id = ${JSON.stringify(id)};
+
+    // --- firma canvas ---
+    const canvas = document.getElementById("sig");
+    const ctx = canvas.getContext("2d");
+    ctx.lineWidth = 2;
+
+    let drawing = false;
+
+    function getPos(e) {
+      const r = canvas.getBoundingClientRect();
+      const touch = e.touches && e.touches[0];
+      const clientX = touch ? touch.clientX : e.clientX;
+      const clientY = touch ? touch.clientY : e.clientY;
+      return { x: clientX - r.left, y: clientY - r.top };
+    }
+
+    function start(e){ drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+    function move(e){ if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
+    function end(){ drawing=false; }
+
+    canvas.addEventListener("mousedown", start);
+    canvas.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+
+    canvas.addEventListener("touchstart", start, {passive:false});
+    canvas.addEventListener("touchmove", move, {passive:false});
+    canvas.addEventListener("touchend", end);
+
+    document.getElementById("clearSig").onclick = () => {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+    };
+
+    function fileToDataUrl(file){
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    }
+
+    document.getElementById("send").onclick = async () => {
+      const status = document.getElementById("status");
+      status.textContent = "Enviando...";
+
+      const personal = document.getElementById("personal").value.trim();
+      const pin = document.getElementById("pin").value.trim();
+      const f1 = document.getElementById("cedFront").files[0];
+      const f2 = document.getElementById("cedBack").files[0];
+
+      if(!personal){ status.textContent = "Falta nombre del personal"; return; }
+      if(!pin){ status.textContent = "Falta PIN"; return; }
+      if(!f1 || !f2){ status.textContent = "Falta foto de cédula (frente y reverso)"; return; }
+
+      const firmaDataUrl = canvas.toDataURL("image/png");
+      const cedulaFrenteDataUrl = await fileToDataUrl(f1);
+      const cedulaReversoDataUrl = await fileToDataUrl(f2);
+
+      const payload = {
+        id,
+        personal,
+        pin,
+        firmaDataUrl,
+        cedulaFrenteDataUrl,
+        cedulaReversoDataUrl
+      };
+
+      const resp = await fetch(window.location.href, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+
+      const html = await resp.text();
+      document.open(); document.write(html); document.close();
+    };
+  </script>
+  `;
 }
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
