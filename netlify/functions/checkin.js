@@ -1,5 +1,6 @@
+// ✅ Pega aquí tu URL real del Apps Script (debe terminar en /exec)
 const GOOGLE_SCRIPT_URL =
-  "PEGA_AQUI_TU_URL_REAL_DE_APPS_SCRIPT/exec"; // 👈 CAMBIA SOLO ESTO
+  "https://script.google.com/macros/s/PEGA_AQUI_TU_ID_REAL/exec";
 
 export async function handler(event) {
   try {
@@ -9,6 +10,15 @@ export async function handler(event) {
     // ---------- POST: enviar evidencia + pin ----------
     if (event.httpMethod === "POST") {
       const body = JSON.parse(event.body || "{}");
+
+      // Validación mínima
+      if (!body || !body.id) {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+          body: `<h2>❌ Falta data del formulario</h2>`
+        };
+      }
 
       const resp = await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
@@ -71,7 +81,7 @@ function pageHtml_(id, validationTxt) {
     <p><b>Firma del huésped</b> (firme con el dedo):</p>
     <canvas id="sig" width="520" height="180" style="border:1px solid #ccc;border-radius:10px;touch-action:none"></canvas>
     <div style="margin-top:8px">
-      <button id="clearSig" style="padding:8px 12px">Limpiar firma</button>
+      <button id="clearSig" type="button" style="padding:8px 12px">Limpiar firma</button>
     </div>
 
     <p style="margin-top:18px"><b>Cédula (Frente)</b>:</p>
@@ -86,7 +96,7 @@ function pageHtml_(id, validationTxt) {
     <input id="pin" type="password" placeholder="PIN" style="padding:8px;width:260px"/>
 
     <br/><br/>
-    <button id="send" style="padding:10px 14px">Confirmar ingreso</button>
+    <button id="send" type="button" style="padding:10px 14px">Confirmar ingreso</button>
 
     <p id="status" style="margin-top:12px;color:#444"></p>
   </div>
@@ -125,7 +135,7 @@ function pageHtml_(id, validationTxt) {
       ctx.clearRect(0,0,canvas.width,canvas.height);
     };
 
-    // ✅ comprimir imagen para que no reviente Netlify
+    // ✅ comprimir imagen (evita Internal Error por tamaño)
     async function fileToCompressedDataUrl(file, maxW = 1200, quality = 0.7) {
       const img = await new Promise((resolve, reject) => {
         const i = new Image();
