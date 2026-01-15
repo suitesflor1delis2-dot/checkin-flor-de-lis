@@ -7,7 +7,7 @@ export async function handler(event) {
     const qs = event.queryStringParameters || {};
     const idQS = String(qs.id || qs.ID || "").trim();
 
-    // ---------- POST: enviar evidencia + pin ----------
+    // ---------- POST ----------
     if (event.httpMethod === "POST") {
       let body = {};
       try {
@@ -16,19 +16,19 @@ export async function handler(event) {
         return html(400, `<h2>❌ JSON inválido</h2><pre>${esc(err.message)}</pre>`);
       }
 
-      // ✅ asegurar ID sí o sí
+      // ✅ asegurar campos mínimos
       if (!body.id && idQS) body.id = idQS;
-
-      if (!body.id) {
-        return html(400, `<h2>❌ Falta ID</h2><p>No llegó id en el POST ni en el URL.</p>`);
-      }
-
-      // ✅ asegurar personal (si viniera vacío, se queda vacío, pero lo mostramos)
+      body.id = String(body.id || "").trim();
       body.personal = String(body.personal || "").trim();
+      body.pin = String(body.pin || "").trim();
 
-      // ✅ CLAVE: mandar id y personal también en el querystring al Apps Script
+      if (!body.id) return html(400, `<h2>❌ Falta ID</h2>`);
+      if (!body.personal) return html(400, `<h2>❌ Falta nombre del personal</h2>`);
+      if (!body.pin) return html(400, `<h2>❌ Falta PIN</h2>`);
+
+      // ✅ CLAVE: mandar id + personal + pin también en querystring a Apps Script
       const postUrl =
-        `${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(body.id)}&personal=${encodeURIComponent(body.personal)}`;
+        `${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(body.id)}&personal=${encodeURIComponent(body.personal)}&pin=${encodeURIComponent(body.pin)}`;
 
       const resp = await fetch(postUrl, {
         method: "POST",
@@ -41,14 +41,15 @@ export async function handler(event) {
       return html(200, `
         <h2>Resultado</h2>
         <p><b>Status Apps Script:</b> ${resp.status}</p>
-        <p><b>ID enviado:</b> ${esc(body.id)}</p>
-        <p><b>Personal enviado (Netlify):</b> ${esc(body.personal || "(vacío)")}</p>
+        <p><b>ID:</b> ${esc(body.id)}</p>
+        <p><b>Personal enviado (Netlify):</b> ${esc(body.personal)}</p>
+        <p><b>PIN enviado (Netlify):</b> ${esc(body.pin ? "SI" : "NO")}</p>
         <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
         <p><a href="?id=${encodeURIComponent(body.id)}">↩ Volver</a></p>
       `);
     }
 
-    // ---------- GET: validación ----------
+    // ---------- GET ----------
     if (!idQS) {
       return html(400, `<h2>❌ Falta el parámetro id</h2><p>Ejemplo: ?id=FLS_0000343</p>`);
     }
@@ -172,7 +173,6 @@ function pageHtml_(id, validationTxt) {
         cedulaReversoDataUrl: await fileToCompressedDataUrl(f2, 1200, 0.7)
       };
 
-      // POST al MISMO endpoint conservando ?id=...
       const postUrl = window.location.pathname + window.location.search;
 
       const resp = await fetch(postUrl, {
