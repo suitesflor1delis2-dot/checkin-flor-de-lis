@@ -4,8 +4,7 @@ export async function handler(event) {
     if (!id) return html(400, `<h2>❌ Falta el parámetro id</h2><p>Ejemplo: ?id=FLS_0000343</p>`);
 
     const GOOGLE_SCRIPT_URL =
-      "https://script.google.com/macros/s/AKfycbwOBI_VV8K0Uve66BEWd1UC0hoUSGX1oUduQIjudF4ADzoIcd-OlIU8J-SRHnRGe2eM/exec";
-
+  "https://script.google.com/macros/s/AKfycbw3GIzb3TtHqY8VNEXyYLWcGnphswHEqkAtcB5T0KenL-gFOotr0m_LN__DMa3PIkuV/exec";
     // Si viene confirm=1, registramos (solo personal) via POST
     if (event.queryStringParameters?.confirm === "1") {
       const pin = event.queryStringParameters?.pin || "";
@@ -65,3 +64,4 @@ function wrap(title, id, txt, isRegister) {
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
+
