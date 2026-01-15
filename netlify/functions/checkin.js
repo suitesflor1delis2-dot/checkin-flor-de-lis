@@ -16,14 +16,17 @@ export async function handler(event) {
         return html(400, `<h2>❌ JSON inválido</h2><pre>${esc(err.message)}</pre>`);
       }
 
-      // ✅ FIX: si body.id no vino, lo tomamos del querystring
+      // ✅ asegurar ID sí o sí
       if (!body.id && idQS) body.id = idQS;
 
       if (!body.id) {
         return html(400, `<h2>❌ Falta ID</h2><p>No llegó id en el POST ni en el URL.</p>`);
       }
 
-      const resp = await fetch(GOOGLE_SCRIPT_URL, {
+      // ✅ CLAVE: mandar id también en el querystring al Apps Script
+      const postUrl = `${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(body.id)}`;
+
+      const resp = await fetch(postUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -34,6 +37,7 @@ export async function handler(event) {
       return html(200, `
         <h2>Resultado</h2>
         <p><b>Status Apps Script:</b> ${resp.status}</p>
+        <p><b>ID enviado:</b> ${esc(body.id)}</p>
         <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
         <p><a href="?id=${encodeURIComponent(body.id)}">↩ Volver</a></p>
       `);
@@ -52,18 +56,9 @@ export async function handler(event) {
       headers: { "Content-Type": "text/html; charset=utf-8" },
       body: pageHtml_(idQS, txt),
     };
-
   } catch (e) {
     return html(500, `<h2>❌ Error Netlify</h2><pre>${esc(e.stack || e.message)}</pre>`);
   }
-}
-
-function html(code, body) {
-  return {
-    statusCode: code,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
-    body: `<div style="font-family:Arial;padding:18px">${body}</div>`
-  };
 }
 
 function pageHtml_(id, validationTxt) {
@@ -175,7 +170,7 @@ function pageHtml_(id, validationTxt) {
 
       const payload = { id, personal, pin, firmaDataUrl, cedulaFrenteDataUrl, cedulaReversoDataUrl };
 
-      // ✅ Enviamos al MISMO endpoint manteniendo el ?id=...
+      // ✅ POST al MISMO endpoint conservando ?id=...
       const postUrl = window.location.pathname + window.location.search;
 
       const resp = await fetch(postUrl, {
@@ -184,11 +179,19 @@ function pageHtml_(id, validationTxt) {
         body: JSON.stringify(payload)
       });
 
-      const html = await resp.text();
-      document.open(); document.write(html); document.close();
+      const htmlResp = await resp.text();
+      document.open(); document.write(htmlResp); document.close();
     };
   </script>
   `;
+}
+
+function html(code, body) {
+  return {
+    statusCode: code,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+    body: `<div style="font-family:Arial;padding:18px">${body}</div>`,
+  };
 }
 
 function esc(s){
