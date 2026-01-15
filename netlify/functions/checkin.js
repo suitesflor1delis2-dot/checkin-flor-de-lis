@@ -1,6 +1,6 @@
 // ✅ Pega aquí tu URL real del Apps Script (debe terminar en /exec)
 const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/PEGA_AQUI_TU_ID_REAL/exec";
+  "https://script.google.com/macros/s/AKfycbw3GIzb3TtHqY8VNEXyYLWcGnphswHEqkAtcB5T0KenL-gFOotr0m_LN__DMa3PIkuV/exec"
 
 export async function handler(event) {
   try {
@@ -195,3 +195,4 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
+
