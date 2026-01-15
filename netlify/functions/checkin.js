@@ -1,23 +1,26 @@
-// ✅ Pega aquí tu URL real del Apps Script (debe terminar en /exec)
+// ✅ URL REAL Apps Script (/exec)
 const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbw3GIzb3TtHqY8VNEXyYLWcGnphswHEqkAtcB5T0KenL-gFOotr0m_LN__DMa3PIkuV/exec"
+  "https://script.google.com/macros/s/AKfycbw3GIzb3TtHqY8VNEXyYLWcGnphswHEqkAtcB5T0KenL-gFOotr0m_LN__DMa3PIkuV/exec";
 
 export async function handler(event) {
   try {
     const qs = event.queryStringParameters || {};
-    const id = String(qs.id || qs.ID || "").trim();
+    const idQS = String(qs.id || qs.ID || "").trim();
 
     // ---------- POST: enviar evidencia + pin ----------
     if (event.httpMethod === "POST") {
-      const body = JSON.parse(event.body || "{}");
+      let body = {};
+      try {
+        body = JSON.parse(event.body || "{}");
+      } catch (err) {
+        return html(400, `<h2>❌ JSON inválido</h2><pre>${esc(err.message)}</pre>`);
+      }
 
-      // Validación mínima
-      if (!body || !body.id) {
-        return {
-          statusCode: 400,
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-          body: `<h2>❌ Falta data del formulario</h2>`
-        };
+      // ✅ FIX: si body.id no vino, lo tomamos del querystring
+      if (!body.id && idQS) body.id = idQS;
+
+      if (!body.id) {
+        return html(400, `<h2>❌ Falta ID</h2><p>No llegó id en el POST ni en el URL.</p>`);
       }
 
       const resp = await fetch(GOOGLE_SCRIPT_URL, {
@@ -28,44 +31,39 @@ export async function handler(event) {
 
       const txt = await resp.text();
 
-      return {
-        statusCode: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-        body: `
-          <div style="font-family:Arial;padding:18px">
-            <h2>Resultado</h2>
-            <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
-            <p><a href="?id=${encodeURIComponent(body.id || "")}">↩ Volver</a></p>
-          </div>
-        `
-      };
+      return html(200, `
+        <h2>Resultado</h2>
+        <p><b>Status Apps Script:</b> ${resp.status}</p>
+        <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
+        <p><a href="?id=${encodeURIComponent(body.id)}">↩ Volver</a></p>
+      `);
     }
 
     // ---------- GET: validación ----------
-    if (!id) {
-      return {
-        statusCode: 400,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-        body: `<h2>❌ Falta el parámetro id</h2><p>Ejemplo: ?id=FLS_0000343</p>`
-      };
+    if (!idQS) {
+      return html(400, `<h2>❌ Falta el parámetro id</h2><p>Ejemplo: ?id=FLS_0000343</p>`);
     }
 
-    const resp = await fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(id)}`);
+    const resp = await fetch(`${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(idQS)}`);
     const txt = await resp.text();
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "text/html; charset=utf-8" },
-      body: pageHtml_(id, txt)
+      body: pageHtml_(idQS, txt),
     };
 
   } catch (e) {
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-      body: `<h2>❌ Error Netlify</h2><pre>${esc(e.stack || e.message)}</pre>`
-    };
+    return html(500, `<h2>❌ Error Netlify</h2><pre>${esc(e.stack || e.message)}</pre>`);
   }
+}
+
+function html(code, body) {
+  return {
+    statusCode: code,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+    body: `<div style="font-family:Arial;padding:18px">${body}</div>`
+  };
 }
 
 function pageHtml_(id, validationTxt) {
@@ -177,7 +175,10 @@ function pageHtml_(id, validationTxt) {
 
       const payload = { id, personal, pin, firmaDataUrl, cedulaFrenteDataUrl, cedulaReversoDataUrl };
 
-      const resp = await fetch(window.location.href, {
+      // ✅ Enviamos al MISMO endpoint manteniendo el ?id=...
+      const postUrl = window.location.pathname + window.location.search;
+
+      const resp = await fetch(postUrl, {
         method: "POST",
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify(payload)
@@ -195,4 +196,3 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
-
