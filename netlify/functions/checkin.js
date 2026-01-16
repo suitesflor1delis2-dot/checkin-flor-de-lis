@@ -1,4 +1,3 @@
-// ✅ URL REAL Apps Script (/exec)
 const GOOGLE_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbzV2O-DGuK9xMeTJ3zvg0kE6pKbg7qN04hnUIy9VGQTePlex8miwj5HaxWY64W0FHPQ/exec";
 
@@ -13,42 +12,34 @@ export async function handler(event) {
       try {
         body = JSON.parse(event.body || "{}");
       } catch (err) {
-        return {
-          statusCode: 400,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-          body: JSON.stringify({ ok: false, error: "JSON inválido", detail: err.message }),
-        };
+        return json(400, { ok: false, error: "JSON inválido", detail: err.message });
       }
 
-      // ✅ asegurar campos mínimos
+      // ✅ acción: "pdf" o (default) "checkin"
+      const action = String(body.action || "checkin").trim();
+
+      // ✅ Asegurar ID
       if (!body.id && idQS) body.id = idQS;
       body.id = String(body.id || "").trim();
+
+      if (!body.id) return json(400, { ok: false, error: "Falta ID" });
+
+      // ---- Generar PDF (rápido desde botón) ----
+      if (action === "pdf") {
+        const url = `${GOOGLE_SCRIPT_URL}?action=pdf&id=${encodeURIComponent(body.id)}`;
+        const resp = await fetch(url);
+        const out = await resp.json().catch(async () => ({ ok: false, error: await resp.text() }));
+        out.apps_status = resp.status;
+        return json(200, out);
+      }
+
+      // ---- Check-in (guardar evidencia) ----
       body.personal = String(body.personal || "").trim();
       body.pin = String(body.pin || "").trim();
 
-      if (!body.id) {
-        return {
-          statusCode: 400,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-          body: JSON.stringify({ ok: false, error: "Falta ID" }),
-        };
-      }
-      if (!body.personal) {
-        return {
-          statusCode: 400,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-          body: JSON.stringify({ ok: false, error: "Falta nombre del personal" }),
-        };
-      }
-      if (!body.pin) {
-        return {
-          statusCode: 400,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-          body: JSON.stringify({ ok: false, error: "Falta PIN" }),
-        };
-      }
+      if (!body.personal) return json(400, { ok: false, error: "Falta nombre del personal" });
+      if (!body.pin) return json(400, { ok: false, error: "Falta PIN" });
 
-      // ✅ CLAVE: mandar id + personal + pin también en querystring a Apps Script
       const postUrl =
         `${GOOGLE_SCRIPT_URL}?id=${encodeURIComponent(body.id)}&personal=${encodeURIComponent(body.personal)}&pin=${encodeURIComponent(body.pin)}`;
 
@@ -58,23 +49,11 @@ export async function handler(event) {
         body: JSON.stringify(body),
       });
 
-      // ✅ Apps Script devuelve JSON (incluye pdf_url)
-      let out = null;
-      try {
-        out = await resp.json();
-      } catch (err) {
-        const txt = await resp.text();
-        out = { ok: false, error: "Apps Script no devolvió JSON", raw: txt };
-      }
-
-      // Agrega status para debug
+      const out = await resp.json().catch(async () => ({ ok: false, error: await resp.text() }));
       out.apps_status = resp.status;
 
-      return {
-        statusCode: 200,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify(out),
-      };
+      // ✅ IMPORTANTE: aquí ya NO pedimos pdf_url, solo check-in OK
+      return json(200, out);
     }
 
     // ---------- GET ----------
@@ -125,6 +104,10 @@ function pageHtml_(id, validationTxt) {
     <br/><br/>
     <button id="send" type="button" style="padding:10px 14px">Confirmar ingreso</button>
 
+    <button id="btnPdf" type="button" style="padding:10px 14px; display:none; margin-left:10px;">
+      Generar PDF
+    </button>
+
     <p id="status" style="margin-top:12px;color:#444"></p>
     <p id="pdfLink" style="margin-top:8px;"></p>
   </div>
@@ -159,7 +142,7 @@ function pageHtml_(id, validationTxt) {
 
     document.getElementById("clearSig").onclick = () => ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    async function fileToCompressedDataUrl(file, maxW = 1200, quality = 0.7) {
+    async function fileToCompressedDataUrl(file, maxW = 900, quality = 0.55) {
       const img = await new Promise((resolve, reject) => {
         const i = new Image();
         i.onload = () => resolve(i);
@@ -180,59 +163,106 @@ function pageHtml_(id, validationTxt) {
       return c.toDataURL("image/jpeg", quality);
     }
 
-    document.getElementById("send").onclick = async () => {
-      const status = document.getElementById("status");
-      const pdfLink = document.getElementById("pdfLink");
-      status.textContent = "Enviando...";
-      pdfLink.innerHTML = "";
-
-      const personal = (document.getElementById("personal").value || "").trim();
-      const pin = (document.getElementById("pin").value || "").trim();
-      const f1 = document.getElementById("cedFront").files[0];
-      const f2 = document.getElementById("cedBack").files[0];
-
-      if(!personal){ status.textContent = "Falta nombre del personal"; return; }
-      if(!pin){ status.textContent = "Falta PIN"; return; }
-      if(!f1 || !f2){ status.textContent = "Falta foto de cédula (frente y reverso)"; return; }
-
-      const payload = {
-        id,
-        personal,
-        pin,
-        firmaDataUrl: canvas.toDataURL("image/png"),
-        cedulaFrenteDataUrl: await fileToCompressedDataUrl(f1, 1200, 0.7),
-        cedulaReversoDataUrl: await fileToCompressedDataUrl(f2, 1200, 0.7)
-      };
-
+    async function postJson(payload) {
       const postUrl = window.location.pathname + window.location.search;
-
       const resp = await fetch(postUrl, {
         method: "POST",
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify(payload)
       });
+      return await resp.json();
+    }
 
-      const out = await resp.json();
+    document.getElementById("send").onclick = async () => {
+      const btn = document.getElementById("send");
+      const btnPdf = document.getElementById("btnPdf");
+      const status = document.getElementById("status");
+      const pdfLink = document.getElementById("pdfLink");
 
-      if (!out.ok) {
-        status.textContent = (out.error || out.message || "Error") + (out.apps_status ? (" (Apps: " + out.apps_status + ")") : "");
-        return;
+      btn.disabled = true;
+      btnPdf.style.display = "none";
+      status.textContent = "1/3 Preparando evidencia...";
+      pdfLink.innerHTML = "";
+
+      try {
+        const personal = (document.getElementById("personal").value || "").trim();
+        const pin = (document.getElementById("pin").value || "").trim();
+        const f1 = document.getElementById("cedFront").files[0];
+        const f2 = document.getElementById("cedBack").files[0];
+
+        if(!personal){ status.textContent = "Falta nombre del personal"; return; }
+        if(!pin){ status.textContent = "Falta PIN"; return; }
+        if(!f1 || !f2){ status.textContent = "Falta foto de cédula (frente y reverso)"; return; }
+
+        status.textContent = "2/3 Comprimiendo fotos...";
+        const payload = {
+          action: "checkin",
+          id,
+          personal,
+          pin,
+          firmaDataUrl: canvas.toDataURL("image/png"),
+          cedulaFrenteDataUrl: await fileToCompressedDataUrl(f1, 900, 0.55),
+          cedulaReversoDataUrl: await fileToCompressedDataUrl(f2, 900, 0.55)
+        };
+
+        status.textContent = "3/3 Guardando evidencia...";
+        const out = await postJson(payload);
+
+        if (!out.ok) {
+          status.textContent = out.error || out.message || "Error";
+          return;
+        }
+
+        status.textContent = "✅ Check-in guardado. Ahora puedes generar el PDF.";
+        btnPdf.style.display = "inline-block";
+
+      } catch (err) {
+        status.textContent = "Error: " + (err.message || err);
+      } finally {
+        btn.disabled = false;
       }
+    };
 
-      status.textContent = "✅ Check-in completado. Abriendo PDF...";
+    document.getElementById("btnPdf").onclick = async () => {
+      const btnPdf = document.getElementById("btnPdf");
+      const status = document.getElementById("status");
+      const pdfLink = document.getElementById("pdfLink");
 
-      if (out.pdf_url) {
-        // Abre el PDF automáticamente
-        window.open(out.pdf_url, "_blank");
+      btnPdf.disabled = true;
+      status.textContent = "Generando PDF...";
+      pdfLink.innerHTML = "";
 
-        // También deja un link visible por si el navegador bloquea popups
-        pdfLink.innerHTML = '<a href="' + out.pdf_url + '" target="_blank">📄 Abrir/Descargar PDF</a>';
-      } else {
-        status.textContent = "✅ Check-in guardado, pero no llegó pdf_url.";
+      try {
+        const out = await postJson({ action: "pdf", id });
+
+        if (!out.ok) {
+          status.textContent = out.error || out.message || "No se pudo generar PDF";
+          return;
+        }
+
+        status.textContent = "✅ PDF generado. Abriendo...";
+        if (out.pdf_url) {
+          window.open(out.pdf_url, "_blank");
+          pdfLink.innerHTML = '<a href="' + out.pdf_url + '" target="_blank">📄 Abrir/Descargar PDF</a>';
+        } else {
+          status.textContent = "✅ Generado, pero no llegó pdf_url.";
+        }
+      } catch (err) {
+        status.textContent = "Error: " + (err.message || err);
+      } finally {
+        btnPdf.disabled = false;
       }
     };
   </script>
   `;
+}
+
+function json(code, obj) {
+  return {
+    statusCode: code,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(obj),
+  };
 }
 
 function html(code, body) {
