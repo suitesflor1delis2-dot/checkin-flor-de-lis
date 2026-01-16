@@ -1,3 +1,4 @@
+// ✅ URL REAL Apps Script (/exec)
 const GOOGLE_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbzV2O-DGuK9xMeTJ3zvg0kE6pKbg7qN04hnUIy9VGQTePlex8miwj5HaxWY64W0FHPQ/exec";
 
@@ -6,7 +7,7 @@ export async function handler(event) {
     const qs = event.queryStringParameters || {};
     const idQS = String(qs.id || qs.ID || "").trim();
 
-    // ---------- POST ----------
+    // ---------- POST (SIEMPRE JSON) ----------
     if (event.httpMethod === "POST") {
       let body = {};
       try {
@@ -15,25 +16,28 @@ export async function handler(event) {
         return json(400, { ok: false, error: "JSON inválido", detail: err.message });
       }
 
-      // ✅ acción: "pdf" o (default) "checkin"
       const action = String(body.action || "checkin").trim();
 
-      // ✅ Asegurar ID
+      // asegurar ID desde querystring
       if (!body.id && idQS) body.id = idQS;
       body.id = String(body.id || "").trim();
-
       if (!body.id) return json(400, { ok: false, error: "Falta ID" });
 
-      // ---- Generar PDF (rápido desde botón) ----
+      // ---- Acción: generar PDF ----
       if (action === "pdf") {
         const url = `${GOOGLE_SCRIPT_URL}?action=pdf&id=${encodeURIComponent(body.id)}`;
         const resp = await fetch(url);
-        const out = await resp.json().catch(async () => ({ ok: false, error: await resp.text() }));
+        const text = await resp.text();
+
+        let out;
+        try { out = JSON.parse(text); }
+        catch { out = { ok: false, error: "Apps Script no devolvió JSON", raw: text }; }
+
         out.apps_status = resp.status;
         return json(200, out);
       }
 
-      // ---- Check-in (guardar evidencia) ----
+      // ---- Acción: checkin (guardar evidencia) ----
       body.personal = String(body.personal || "").trim();
       body.pin = String(body.pin || "").trim();
 
@@ -49,14 +53,17 @@ export async function handler(event) {
         body: JSON.stringify(body),
       });
 
-      const out = await resp.json().catch(async () => ({ ok: false, error: await resp.text() }));
-      out.apps_status = resp.status;
+      const text = await resp.text();
 
-      // ✅ IMPORTANTE: aquí ya NO pedimos pdf_url, solo check-in OK
+      let out;
+      try { out = JSON.parse(text); }
+      catch { out = { ok: false, error: "Apps Script no devolvió JSON", raw: text }; }
+
+      out.apps_status = resp.status;
       return json(200, out);
     }
 
-    // ---------- GET ----------
+    // ---------- GET (HTML del formulario) ----------
     if (!idQS) {
       return html(400, `<h2>❌ Falta el parámetro id</h2><p>Ejemplo: ?id=FLS_0000343</p>`);
     }
@@ -70,6 +77,10 @@ export async function handler(event) {
       body: pageHtml_(idQS, txt),
     };
   } catch (e) {
+    // IMPORTANTE: en caso de POST, igual devolvemos JSON
+    if (event && event.httpMethod === "POST") {
+      return json(500, { ok: false, error: "Error Netlify", detail: String(e.stack || e.message) });
+    }
     return html(500, `<h2>❌ Error Netlify</h2><pre>${esc(e.stack || e.message)}</pre>`);
   }
 }
@@ -79,6 +90,7 @@ function pageHtml_(id, validationTxt) {
   <div style="font-family:Arial;padding:18px;max-width:720px">
     <h2>Validación de reserva</h2>
     <p style="color:green;font-weight:bold">✅ VERSION NUEVA CON PDF</p>
+
     <p><b>ID:</b> ${esc(id)}</p>
     <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(validationTxt)}</pre>
 
@@ -171,7 +183,9 @@ function pageHtml_(id, validationTxt) {
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify(payload)
       });
-      return await resp.json();
+      const text = await resp.text();
+      try { return JSON.parse(text); }
+      catch { return { ok:false, error:"Respuesta no es JSON", raw:text }; }
     }
 
     document.getElementById("send").onclick = async () => {
@@ -217,8 +231,6 @@ function pageHtml_(id, validationTxt) {
         status.textContent = "✅ Check-in guardado. Ahora puedes generar el PDF.";
         btnPdf.style.display = "inline-block";
 
-      } catch (err) {
-        status.textContent = "Error: " + (err.message || err);
       } finally {
         btn.disabled = false;
       }
@@ -248,8 +260,6 @@ function pageHtml_(id, validationTxt) {
         } else {
           status.textContent = "✅ Generado, pero no llegó pdf_url.";
         }
-      } catch (err) {
-        status.textContent = "Error: " + (err.message || err);
       } finally {
         btnPdf.disabled = false;
       }
@@ -279,4 +289,3 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
-
