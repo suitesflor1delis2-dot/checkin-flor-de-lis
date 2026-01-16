@@ -20,15 +20,15 @@ exports.handler = async (event) => {
 
     // ===== SOLO POST =====
     if (event.httpMethod !== "POST") {
-      return {
-        statusCode: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-        body: JSON.stringify({ ok: true }),
-      };
-    }
+  const id = event.queryStringParameters?.id || "";
+  return {
+    statusCode: 302,
+    headers: {
+      Location: `https://checkin-flor-de-lis.netlify.app/?id=${id}`,
+    },
+    body: "",
+  };
+}
 
     // ===== LEER JSON =====
     let payload;
@@ -102,3 +102,4 @@ exports.handler = async (event) => {
     };
   }
 };
+
