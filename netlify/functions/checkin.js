@@ -5,20 +5,20 @@ const WEBAPP_URL =
 
 exports.handler = async (event) => {
   try {
-    // CORS
+    // ===== CORS =====
     if (event.httpMethod === "OPTIONS") {
       return {
         statusCode: 200,
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Allow-Methods": "POST,OPTIONS",
+          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
         },
         body: "",
       };
     }
 
-    // 👉 GET = REDIRIGE AL FORMULARIO
+    // ===== GET → REDIRIGE AL FORMULARIO =====
     if (event.httpMethod === "GET") {
       const id = event.queryStringParameters?.id || "";
       return {
@@ -30,16 +30,25 @@ exports.handler = async (event) => {
       };
     }
 
-    // 👉 SOLO POST REGISTRA
-    let payload = JSON.parse(event.body || "{}");
+    // ===== SOLO POST REGISTRA =====
+    let payload;
+    try {
+      payload = JSON.parse(event.body || "{}");
+    } catch (err) {
+      return {
+        statusCode: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: false, error: "JSON inválido en Netlify" }),
+      };
+    }
 
-    const r = await fetch(WEBAPP_URL, {
+    const response = await fetch(WEBAPP_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    const text = await r.text();
+    const text = await response.text();
 
     return {
       statusCode: 200,
