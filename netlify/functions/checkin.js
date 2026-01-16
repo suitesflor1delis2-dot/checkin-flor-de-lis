@@ -5,6 +5,7 @@ const WEBAPP_URL =
 
 exports.handler = async (event) => {
   try {
+
     // ===== CORS =====
     if (event.httpMethod === "OPTIONS") {
       return {
@@ -30,17 +31,8 @@ exports.handler = async (event) => {
       };
     }
 
-    // ===== SOLO POST REGISTRA =====
-    let payload;
-    try {
-      payload = JSON.parse(event.body || "{}");
-    } catch (err) {
-      return {
-        statusCode: 400,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ok: false, error: "JSON inválido en Netlify" }),
-      };
-    }
+    // ===== POST =====
+    const payload = JSON.parse(event.body || "{}");
 
     const response = await fetch(WEBAPP_URL, {
       method: "POST",
