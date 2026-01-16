@@ -78,6 +78,7 @@ function pageHtml_(id, validationTxt) {
   return `
   <div style="font-family:Arial;padding:18px;max-width:720px">
     <h2>Validación de reserva</h2>
+    <p style="color:green;font-weight:bold">✅ VERSION NUEVA CON PDF</p>
     <p><b>ID:</b> ${esc(id)}</p>
     <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(validationTxt)}</pre>
 
@@ -278,3 +279,4 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
+
