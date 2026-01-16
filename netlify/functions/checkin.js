@@ -3,103 +3,56 @@
 const WEBAPP_URL =
   "https://script.google.com/macros/s/AKfycbznzmdsNzjEpqCUoy0KcOKkTunU_RDJClTAKRd8xjFN1iTpAWQR-BRTHgdTwtmgV93Z/exec";
 
+function json(statusCode, obj) {
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    },
+    body: JSON.stringify(obj),
+  };
+}
+
 exports.handler = async (event) => {
   try {
-    // ===== CORS =====
-    if (event.httpMethod === "OPTIONS") {
-      return {
-        statusCode: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-        },
-        body: "",
-      };
-    }
+    if (event.httpMethod === "OPTIONS") return json(200, { ok: true });
 
-    const qs = event.queryStringParameters || {};
-    const id = qs.id || "";
-
-    // ===== GET → SOLO HTML (FORMULARIO) =====
+    // ✅ SI LLEGA GET, DEVUELVE JSON (NO HTML)
     if (event.httpMethod === "GET") {
-      return {
-        statusCode: 200,
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-        },
-        body: `
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Check-in Flor de Lis</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-</head>
-<body style="font-family:Arial;padding:20px">
-  <h2>Check-in Flor de Lis</h2>
-  <p><b>ID:</b> ${id}</p>
-  <p>✔ Página cargada correctamente</p>
-  <p>El formulario real se maneja por tu JS existente.</p>
-</body>
-</html>
-        `,
-      };
+      const qs = event.queryStringParameters || {};
+      const id = String(qs.id || qs.ID || "").trim();
+      return json(200, { ok: true, metodo: "GET", id, hint: "Usa POST para registrar" });
     }
 
-    // ===== POST → SOLO JSON =====
-    if (event.httpMethod === "POST") {
-      let payload;
-      try {
-        payload = JSON.parse(event.body || "{}");
-      } catch {
-        return {
-          statusCode: 400,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ok: false, error: "JSON inválido" }),
-        };
-      }
-
-      const response = await fetch(WEBAPP_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const text = await response.text();
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        return {
-          statusCode: 502,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ok: false,
-            error: "Apps Script no devolvió JSON",
-            raw: text.slice(0, 500),
-          }),
-        };
-      }
-
-      return {
-        statusCode: 200,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      };
+    if (event.httpMethod !== "POST") {
+      return json(405, { ok: false, error: "Metodo no permitido" });
     }
 
-    return {
-      statusCode: 405,
-      body: "Método no permitido",
-    };
-  } catch (err) {
-    return {
-      statusCode: 500,
+    // reenviar tal cual el body (tu frontend ya manda id/pin/fotos)
+    const r = await fetch(WEBAPP_URL, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ok: false, error: String(err) }),
-    };
+      body: event.body || "{}",
+    });
+
+    const text = await r.text();
+
+    // devolver lo que venga. si no es JSON, lo envolvemos en JSON para que no reviente
+    try {
+      const data = JSON.parse(text);
+      return json(200, data);
+    } catch {
+      return json(502, {
+        ok: false,
+        error: "Apps Script devolvio HTML/no-JSON",
+        http_status: r.status,
+        body_preview: text.slice(0, 1200),
+      });
+    }
+  } catch (e) {
+    return json(500, { ok: false, error: String(e) });
   }
 };
-
