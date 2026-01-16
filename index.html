@@ -1,154 +1,109 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Check-in Hotel</title>
-  <style>
-    body{font-family:Arial;max-width:540px;margin:40px auto;padding:0 16px;text-align:center}
-    .card{border:1px solid #ddd;border-radius:14px;padding:18px}
-    .big{font-size:20px;margin:10px 0}
-    .muted{color:#666}
-    code{background:#f5f5f5;padding:2px 6px;border-radius:6px}
-    button{font-size:18px;padding:12px 16px;border-radius:12px;border:0;cursor:pointer}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="big" id="status">Procesando…</div>
-    <div class="muted" id="details"></div>
-    <div style="margin-top:14px">
-      <button onclick="location.reload()">Reintentar</button>
-    </div>
-  </div>
+// netlify/functions/checkin.js
+const WEBAPP_URL =
+  "https://script.google.com/macros/s/AKfycbznzmdsNzjEpqCUoy0KcOKkTunU_RDJClTAKRd8xjFN1iTpAWQR-BRTHgdTwtmgV93Z/exec";
 
-<script>
-  function getParam(name){
-    const p = new URLSearchParams(location.search);
-    return p.get(name) || "";
-  }
-
-  async function run(){
-    const id = getParam("id");
-    const status = document.getElementById("status");
-    const details = document.getElementById("details");
-
-    if(!id){
-      status.textContent = "Falta el parámetro id";
-      details.innerHTML = 'Ejemplo: <code>?id=FLS_0000343</code>';
-      return;
-    }
-
-    try{
-      const r = await fetch("/.netlify/functions/checkin?id=" + encodeURIComponent(id));
-      const data = await r.json();
-
-      status.textContent = data.message || "Respuesta sin mensaje";
-      if(data.cliente || data.suite){
-        details.textContent = `Cliente: ${data.cliente || "-"} | Suite: ${data.suite || "-"}`;
-      } else {
-        details.textContent = "";
-      }
-    }catch(e){
-      status.textContent = "Error al conectar";
-      details.textContent = String(e);
-    }
-  }
-
-  run();
-</script>
-</body>
-
-</html>
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbznzmdsNzjEpqCUoy0KcOKkTunU_RDJClTAKRd8xjFN1iTpAWQR-BRTHgdTwtmgV93Z/exec";
-
-// 1) Tomar el ID desde la URL: ?id=FLS_0000347
-function getIdFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  return (params.get("id") || "").trim();
+function json(statusCode, obj) {
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    },
+    body: JSON.stringify(obj),
+  };
 }
 
-// 2) Convertir un archivo (input type=file) a DataURL (base64)
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    if (!file) return resolve("");
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);     // DataURL completo
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-    reader.readAsDataURL(file);
-  });
+function html(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+    },
+    body,
+  };
 }
 
-// 3) Tomar firma del canvas a DataURL
-function getFirmaDataUrl() {
-  const canvas = document.getElementById("firmaCanvas");
-  if (!canvas) return "";
-  return canvas.toDataURL("image/png");
-}
-
-// 4) Botón Confirmar ingreso
-document.getElementById("btnConfirmar")?.addEventListener("click", async () => {
+exports.handler = async (event) => {
   try {
-    const id = getIdFromUrl();
-    if (!id) {
-      alert("No se encontró el ID en el enlace. Ej: ?id=FLS_0000347");
-      return;
+    // CORS preflight
+    if (event.httpMethod === "OPTIONS") {
+      return json(200, { ok: true, preflight: true });
     }
 
-    const personal = (document.getElementById("personal")?.value || "").trim();
-    const pin = (document.getElementById("pin")?.value || "").trim();
+    const qs = event.queryStringParameters || {};
+    const id = String(qs.id || qs.ID || "").trim();
 
-    const frenteFile = document.getElementById("cedulaFrente")?.files?.[0];
-    const reversoFile = document.getElementById("cedulaReverso")?.files?.[0];
+    // ---------- GET: mostrar página (QR abre esto) ----------
+    if (event.httpMethod === "GET") {
+      if (!id) {
+        return html(
+          400,
+          `<h2>❌ Falta id</h2><p>El QR debe tener ?id=FLS_0000...</p>`
+        );
+      }
 
-    const firmaDataUrl = getFirmaDataUrl();
-
-    if (!personal) return alert("Escribe el nombre del personal.");
-    if (!pin) return alert("Escribe el PIN.");
-    if (!firmaDataUrl) return alert("Falta la firma.");
-    if (!frenteFile) return alert("Falta la foto de cédula (Frente).");
-    if (!reversoFile) return alert("Falta la foto de cédula (Reverso).");
-
-    // Convertir fotos a base64
-    const cedulaFrenteDataUrl = await fileToDataUrl(frenteFile);
-    const cedulaReversoDataUrl = await fileToDataUrl(reversoFile);
-
-    // Armar payload EXACTO como tu Apps Script espera
-    const payload = {
-      id,
-      personal,
-      pin,
-      firmaDataUrl,
-      cedulaFrenteDataUrl,
-      cedulaReversoDataUrl
-    };
-
-    // Enviar a Apps Script
-    const resp = await fetch(WEBAPP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const out = await resp.json();
-
-    if (!out.ok) {
-      alert(out.error || out.message || "No se pudo completar el check-in.");
-      return;
+      // Esta página solo sirve como "entrada". Tu frontend real puede ser otro.
+      return html(
+        200,
+        `
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Check-in</title></head>
+<body style="font-family:Arial,sans-serif;padding:16px">
+  <h2>Check-in Flor de Lis</h2>
+  <p><b>ID:</b> ${id}</p>
+  <p>✅ El link está bien. Ahora usa el formulario de tu web para enviar firma y cédula.</p>
+  <p style="color:#666;font-size:12px">Si sigues viendo “no devolvió JSON”, el problema está en el POST.</p>
+</body>
+</html>`
+      );
     }
 
-    // Abrir el PDF
-    if (out.pdf_url) {
-      window.open(out.pdf_url, "_blank");
-    } else {
-      alert("Check-in guardado, pero no llegó pdf_url.");
+    // ---------- POST: reenviar a Apps Script ----------
+    if (event.httpMethod === "POST") {
+      let payload = {};
+      try {
+        payload = JSON.parse(event.body || "{}");
+      } catch (e) {
+        return json(400, { ok: false, error: "JSON inválido en Netlify", detail: e.message });
+      }
+
+      // asegura id desde querystring si no vino en body
+      if (!payload.id && id) payload.id = id;
+
+      // REENVIO a Apps Script
+      const r = await fetch(WEBAPP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await r.text(); // <-- CLAVE: primero texto
+
+      // intenta parsear JSON
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        // aquí está la razón real del “no devolvió JSON”
+        return json(502, {
+          ok: false,
+          error: "Apps Script devolvió NO-JSON (HTML u otro).",
+          http_status: r.status,
+          body_preview: text.slice(0, 1500),
+        });
+      }
+
+      // devuelve lo que respondió Apps Script
+      return json(200, data);
     }
 
-    alert("✅ Check-in completado.");
-
+    return json(405, { ok: false, error: "Método no permitido" });
   } catch (err) {
-    console.error(err);
-    alert("Error: " + (err.message || err));
+    return json(500, { ok: false, error: "Error interno Netlify", detail: String(err) });
   }
-});
-
+};
