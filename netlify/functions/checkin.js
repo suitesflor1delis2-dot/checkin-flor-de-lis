@@ -13,7 +13,9 @@ exports.handler = async (event) => {
 
   const response = await fetch(WEBAPP_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: event.body,
   });
 
@@ -21,7 +23,9 @@ exports.handler = async (event) => {
 
   return {
     statusCode: 200,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: text,
   };
 };
