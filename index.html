@@ -58,4 +58,96 @@
   run();
 </script>
 </body>
+
 </html>
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxCDnKVgsE7Snphmqa1-i1GpOKMTxdcF34dfWJhnS4L5fYyFrQMwclrxWIq2V00pBhg/exec";
+
+// 1) Tomar el ID desde la URL: ?id=FLS_0000347
+function getIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return (params.get("id") || "").trim();
+}
+
+// 2) Convertir un archivo (input type=file) a DataURL (base64)
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve("");
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);     // DataURL completo
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// 3) Tomar firma del canvas a DataURL
+function getFirmaDataUrl() {
+  const canvas = document.getElementById("firmaCanvas");
+  if (!canvas) return "";
+  return canvas.toDataURL("image/png");
+}
+
+// 4) Botón Confirmar ingreso
+document.getElementById("btnConfirmar")?.addEventListener("click", async () => {
+  try {
+    const id = getIdFromUrl();
+    if (!id) {
+      alert("No se encontró el ID en el enlace. Ej: ?id=FLS_0000347");
+      return;
+    }
+
+    const personal = (document.getElementById("personal")?.value || "").trim();
+    const pin = (document.getElementById("pin")?.value || "").trim();
+
+    const frenteFile = document.getElementById("cedulaFrente")?.files?.[0];
+    const reversoFile = document.getElementById("cedulaReverso")?.files?.[0];
+
+    const firmaDataUrl = getFirmaDataUrl();
+
+    if (!personal) return alert("Escribe el nombre del personal.");
+    if (!pin) return alert("Escribe el PIN.");
+    if (!firmaDataUrl) return alert("Falta la firma.");
+    if (!frenteFile) return alert("Falta la foto de cédula (Frente).");
+    if (!reversoFile) return alert("Falta la foto de cédula (Reverso).");
+
+    // Convertir fotos a base64
+    const cedulaFrenteDataUrl = await fileToDataUrl(frenteFile);
+    const cedulaReversoDataUrl = await fileToDataUrl(reversoFile);
+
+    // Armar payload EXACTO como tu Apps Script espera
+    const payload = {
+      id,
+      personal,
+      pin,
+      firmaDataUrl,
+      cedulaFrenteDataUrl,
+      cedulaReversoDataUrl
+    };
+
+    // Enviar a Apps Script
+    const resp = await fetch(WEBAPP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const out = await resp.json();
+
+    if (!out.ok) {
+      alert(out.error || out.message || "No se pudo completar el check-in.");
+      return;
+    }
+
+    // Abrir el PDF
+    if (out.pdf_url) {
+      window.open(out.pdf_url, "_blank");
+    } else {
+      alert("Check-in guardado, pero no llegó pdf_url.");
+    }
+
+    alert("✅ Check-in completado.");
+
+  } catch (err) {
+    console.error(err);
+    alert("Error: " + (err.message || err));
+  }
+});
