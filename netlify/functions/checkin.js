@@ -13,7 +13,11 @@ export async function handler(event) {
       try {
         body = JSON.parse(event.body || "{}");
       } catch (err) {
-        return html(400, `<h2>❌ JSON inválido</h2><pre>${esc(err.message)}</pre>`);
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ ok: false, error: "JSON inválido", detail: err.message }),
+        };
       }
 
       // ✅ asegurar campos mínimos
@@ -22,9 +26,27 @@ export async function handler(event) {
       body.personal = String(body.personal || "").trim();
       body.pin = String(body.pin || "").trim();
 
-      if (!body.id) return html(400, `<h2>❌ Falta ID</h2>`);
-      if (!body.personal) return html(400, `<h2>❌ Falta nombre del personal</h2>`);
-      if (!body.pin) return html(400, `<h2>❌ Falta PIN</h2>`);
+      if (!body.id) {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ ok: false, error: "Falta ID" }),
+        };
+      }
+      if (!body.personal) {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ ok: false, error: "Falta nombre del personal" }),
+        };
+      }
+      if (!body.pin) {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ ok: false, error: "Falta PIN" }),
+        };
+      }
 
       // ✅ CLAVE: mandar id + personal + pin también en querystring a Apps Script
       const postUrl =
@@ -36,17 +58,23 @@ export async function handler(event) {
         body: JSON.stringify(body),
       });
 
-      const txt = await resp.text();
+      // ✅ Apps Script devuelve JSON (incluye pdf_url)
+      let out = null;
+      try {
+        out = await resp.json();
+      } catch (err) {
+        const txt = await resp.text();
+        out = { ok: false, error: "Apps Script no devolvió JSON", raw: txt };
+      }
 
-      return html(200, `
-        <h2>Resultado</h2>
-        <p><b>Status Apps Script:</b> ${resp.status}</p>
-        <p><b>ID:</b> ${esc(body.id)}</p>
-        <p><b>Personal enviado (Netlify):</b> ${esc(body.personal)}</p>
-        <p><b>PIN enviado (Netlify):</b> ${esc(body.pin ? "SI" : "NO")}</p>
-        <pre style="background:#f6f6f6;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(txt)}</pre>
-        <p><a href="?id=${encodeURIComponent(body.id)}">↩ Volver</a></p>
-      `);
+      // Agrega status para debug
+      out.apps_status = resp.status;
+
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify(out),
+      };
     }
 
     // ---------- GET ----------
@@ -98,6 +126,7 @@ function pageHtml_(id, validationTxt) {
     <button id="send" type="button" style="padding:10px 14px">Confirmar ingreso</button>
 
     <p id="status" style="margin-top:12px;color:#444"></p>
+    <p id="pdfLink" style="margin-top:8px;"></p>
   </div>
 
   <script>
@@ -153,7 +182,9 @@ function pageHtml_(id, validationTxt) {
 
     document.getElementById("send").onclick = async () => {
       const status = document.getElementById("status");
+      const pdfLink = document.getElementById("pdfLink");
       status.textContent = "Enviando...";
+      pdfLink.innerHTML = "";
 
       const personal = (document.getElementById("personal").value || "").trim();
       const pin = (document.getElementById("pin").value || "").trim();
@@ -181,8 +212,24 @@ function pageHtml_(id, validationTxt) {
         body: JSON.stringify(payload)
       });
 
-      const htmlResp = await resp.text();
-      document.open(); document.write(htmlResp); document.close();
+      const out = await resp.json();
+
+      if (!out.ok) {
+        status.textContent = (out.error || out.message || "Error") + (out.apps_status ? (" (Apps: " + out.apps_status + ")") : "");
+        return;
+      }
+
+      status.textContent = "✅ Check-in completado. Abriendo PDF...";
+
+      if (out.pdf_url) {
+        // Abre el PDF automáticamente
+        window.open(out.pdf_url, "_blank");
+
+        // También deja un link visible por si el navegador bloquea popups
+        pdfLink.innerHTML = '<a href="' + out.pdf_url + '" target="_blank">📄 Abrir/Descargar PDF</a>';
+      } else {
+        status.textContent = "✅ Check-in guardado, pero no llegó pdf_url.";
+      }
     };
   </script>
   `;
@@ -201,6 +248,3 @@ function esc(s){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
 }
-
-
-
